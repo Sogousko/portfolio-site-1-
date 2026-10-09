@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soichiro Okada</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <a href="#top" class="logo">Soichiro Okada</a>
+
+    <nav>
+        <a href="#about">About</a>
+        <a href="#works">Works</a>
+    </nav>
+</header>
+
+
+<main>
+
+    <!-- Top -->
+    <section id="top" class="top">
+
+        <img src="./media/背景.jpg" alt="ポートフォリオの背景">
+
+        <div class="top-text">
+            <h1>
+                Soichiro Okada<br>
+                <span>Portfolio</span>
+            </h1>
+            <p id="weather-icon"> </p>
+
+            <p>
+                Data Analysis × Sports × Society
+            </p>
+        </div>
+
+    </section>
+
+
+    <!-- About -->
+    <section id="about" class="about">
+
+        <h3>About</h3>
+
+        <div class="about-content">
+
+            <div>
+                <p>
+                    名前：岡田壮一郎<br>
+                    デザイン・データ科学部<br>
+                    出身：川崎市
+                </p>
+            </div>
+
+            <div>
+                <p>
+                    専門：データ分析、統計学<br>
+                    スキル：Python、Pandas
+                </p>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- Works -->
+    <section id="works" class="works">
+
+        <h3>Works</h3>
+
+        <p class="works-intro">
+            データ分析やプログラミングを使って制作した作品です。
+        </p>
+
+
+        <!-- 絞り込み・並び替え -->
+        <div class="works-controls">
+
+            <select id="category">
+                <option value="all">すべてのカテゴリ</option>
+            </select>
+
+            <select id="sort">
+                <option value="new">新しい順</option>
+                <option value="old">古い順</option>
+                <option value="title">タイトル順</option>
+            </select>
+
+        </div>
+
+
+        <!-- JavaScriptで作品を表示 -->
+        <div id="works-grid"></div>
+
+    </section>
+
+</main>
+
+
+<footer>
+    <span>© 2026 Soichiro Okada</span>
+</footer>
+
+
+<!-- JavaScript -->
+<script src="./works.js"></script>
+
+</body>
+</html>
+
+
+
+
+
+
