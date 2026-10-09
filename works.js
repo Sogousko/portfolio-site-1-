@@ -2,277 +2,345 @@
 "use strict";
 
 // ========================================
-// 1. CSVファイルを読み込む
+// 1. CSVを解析する関数
+// ========================================
+
+function parseCSV(text) {
+    var rows = [];
+    var row = [];
+    var value = "";
+    var insideQuotes = false;
+
+    // 先頭のBOMを取り除く
+    text = text.replace(/^\uFEFF/, "");
+
+    for (var i = 0; i < text.length; i++) {
+        var char = text[i];
+        var next = text[i + 1];
+
+        if (char === '"') {
+            // "" は文字としてのダブルクォート
+            if (insideQuotes && next === '"') {
+                value += '"';
+                i++;
+            } else {
+                insideQuotes = !insideQuotes;
+            }
+        } else if (char === "," && !insideQuotes) {
+            row.push(value.trim());
+            value = "";
+        } else if (
+            (char === "\n" || char === "\r") &&
+            !insideQuotes
+        ) {
+            if (char === "\r" && next === "\n") {
+                i++;
+            }
+
+            row.push(value.trim());
+
+            if (row.some(function(item) {
+                return item !== "";
+            })) {
+                rows.push(row);
+            }
+
+            row = [];
+            value = "";
+        } else {
+            value += char;
+        }
+    }
+
+    // 最後の行を追加
+    row.push(value.trim());
+
+    if (row.some(function(item) {
+        return item !== "";
+    })) {
+        rows.push(row);
+    }
+
+    if (rows.length < 2) {
+        throw new Error("CSVに作品データがありません");
+    }
+
+    var headers = rows[0].map(function(header) {
+        return header.trim();
+    });
+
+    return rows.slice(1).map(function(values) {
+        var work = {};
+
+        headers.forEach(function(header, index) {
+            work[header] = (values[index] || "").trim();
+        });
+
+        return {
+            title: work.title || "タイトル未設定",
+            description: work.description || "説明はありません",
+            image: work.image || "",
+            category: work.category || "その他",
+            year: work.year || ""
+        };
+    });
+}
+
+
+// ========================================
+// 2. HTMLの要素を取得
+// ========================================
+
+var grid = document.getElementById("works-grid");
+var categorySelect = document.getElementById("category");
+var sortSelect = document.getElementById("sort");
+var worksCount = document.getElementById("works-count");
+
+var allWorks = [];
+
+
+// ========================================
+// 3. CSVを読み込む
 // ========================================
 
 fetch("./works.csv")
     .then(function(response) {
         if (!response.ok) {
-            throw new Error("works.csvを読み込めませんでした");
+            throw new Error(
+                "works.csvの読み込みに失敗しました"
+            );
         }
 
         return response.text();
     })
+    .then(function(text) {
+        allWorks = parseCSV(text);
 
-    .then(function(data) {
+        // データが正しく読み込めたか確認
+        console.log("作品データ:", allWorks);
 
-        // ========================================
-        // 2. CSVを解析する
-        // ========================================
-
-        var rows = data.trim().split(/\r?\n/);
-
-        if (rows.length < 2) {
-            throw new Error("CSVに作品データがありません");
-        }
-
-        var headers = rows[0].replace(/^\uFEFF/, "")
-            .split(",")
-            .map(function(header) {
-                return header.trim();
-            });
-
-        var works = [];
-
-        for (var i = 1; i < rows.length; i++) {
-
-            if (rows[i].trim() === "") {
-                continue;
-            }
-
-            var values = rows[i].split(",");
-            var work = {};
-
-            headers.forEach(function(header, index) {
-                work[header] = (values[index] || "").trim();
-            });
-
-            // 必要な項目がない場合に備える
-            work.title = work.title || "タイトル未設定";
-            work.description = work.description || "説明はありません";
-            work.image = work.image || "";
-            work.category = work.category || "その他";
-            work.year = work.year || "0";
-
-            works.push(work);
-        }
-
-        console.log("読み込んだ作品数:", works.length);
-        console.log("作品データ:", works);
-
-
-        // ========================================
-        // 3. HTMLの要素を取得する
-        // ========================================
-
-        var grid = document.getElementById("works-grid");
-        var categorySelect = document.getElementById("category");
-        var sortSelect = document.getElementById("sort");
-
-        if (!grid || !categorySelect || !sortSelect) {
-            console.error(
-                "works-grid、category、sortのIDをHTMLで確認してください"
-            );
-            return;
-        }
-
-
-        // ========================================
-        // 4. カテゴリー一覧を作成する
-        // ========================================
-
-        // 「すべて」を最初に表示
-        categorySelect.innerHTML =
-            '<option value="all">すべてのカテゴリー</option>';
-
-        var categories = [];
-
-        works.forEach(function(work) {
-            if (!categories.includes(work.category)) {
-                categories.push(work.category);
-            }
-        });
-
-        categories.forEach(function(category) {
-            var option = document.createElement("option");
-
-            option.value = category;
-            option.textContent = category;
-
-            categorySelect.appendChild(option);
-        });
-
-
-        // ========================================
-        // 5. 作品を表示する関数
-        // ========================================
-
-        function displayWorks() {
-
-            var selectedCategory = categorySelect.value;
-            var sortType = sortSelect.value;
-
-            // 元の作品データをコピーする
-            var displayList = works.slice();
-
-
-            // ----------------------------------------
-            // カテゴリーで絞り込む
-            // ----------------------------------------
-
-            if (selectedCategory !== "all") {
-                displayList = displayList.filter(function(work) {
-                    return work.category === selectedCategory;
-                });
-            }
-
-
-            // ----------------------------------------
-            // 並び替える
-            // ----------------------------------------
-
-            if (sortType === "new") {
-                displayList.sort(function(a, b) {
-                    return Number(b.year) - Number(a.year);
-                });
-
-            } else if (sortType === "old") {
-                displayList.sort(function(a, b) {
-                    return Number(a.year) - Number(b.year);
-                });
-
-            } else if (sortType === "title") {
-                displayList.sort(function(a, b) {
-                    return a.title.localeCompare(b.title, "ja");
-                });
-            }
-
-
-            // ----------------------------------------
-            // 現在の作品表示をクリアする
-            // ----------------------------------------
-
-            grid.innerHTML = "";
-
-
-            // ----------------------------------------
-            // 作品がない場合
-            // ----------------------------------------
-
-            if (displayList.length === 0) {
-                var message = document.createElement("p");
-                message.textContent = "該当する作品がありません。";
-                grid.appendChild(message);
-                return;
-            }
-
-
-            // ----------------------------------------
-            // 作品カードを作成する
-            // ----------------------------------------
-
-            displayList.forEach(function(work) {
-
-                var card = document.createElement("article");
-                card.className = "work-card";
-
-                // 画像を作成
-                if (work.image) {
-                    var img = document.createElement("img");
-
-                    img.src = work.image;
-                    img.alt = work.title;
-                    img.loading = "lazy";
-
-                    // 画像が見つからない場合
-                    img.addEventListener("error", function() {
-                        console.error("画像を読み込めません:", work.image);
-                        img.alt = work.title + "（画像を読み込めません）";
-                    });
-
-                    card.appendChild(img);
-                }
-
-                // 作品情報を作成
-                var info = document.createElement("div");
-                info.className = "works-info";
-
-                var category = document.createElement("p");
-                category.className = "work-category";
-                category.textContent = work.category;
-
-                var title = document.createElement("h4");
-                title.textContent = work.title;
-
-                var description = document.createElement("p");
-                description.textContent = work.description;
-
-                var year = document.createElement("p");
-                year.className = "work-year";
-                year.textContent =
-                    work.year === "0" ? "" : work.year + "年";
-
-                info.appendChild(category);
-                info.appendChild(title);
-                info.appendChild(description);
-                info.appendChild(year);
-
-                card.appendChild(info);
-                grid.appendChild(card);
-            });
-
-            console.log("現在の表示作品数:", displayList.length);
-        }
-
-
-        // ========================================
-        // 6. 最初の作品を表示する
-        // ========================================
-
+        createCategoryOptions();
         displayWorks();
-
-
-        // ========================================
-        // 7. カテゴリー変更時に再表示する
-        // ========================================
-
-        categorySelect.addEventListener("change", function() {
-            displayWorks();
-        });
-
-
-        // ========================================
-        // 8. 並び順変更時に再表示する
-        // ========================================
-
-        sortSelect.addEventListener("change", function() {
-            displayWorks();
-        });
-
     })
-
-    // ========================================
-    // 9. CSV読み込みのエラー処理
-    // ========================================
-
     .catch(function(error) {
-        console.error("作品データの読み込みに失敗しました:", error);
-
-        var grid = document.getElementById("works-grid");
+        console.error(error);
 
         if (grid) {
             grid.textContent =
-                "作品を読み込めませんでした。works.csvの場所を確認してください。";
+                "作品を読み込めませんでした。" +
+                "works.csvの場所やCSVの内容を確認してください。";
+        }
+
+        if (worksCount) {
+            worksCount.textContent = "読み込みエラー";
         }
     });
 
 
 // ========================================
-// 10. 天気情報を取得する
+// 4. カテゴリを自動生成
 // ========================================
 
-var latitude = 35.6895;
-var longitude = 139.6917;
+function createCategoryOptions() {
+    var categories = [];
+
+    allWorks.forEach(function(work) {
+        if (
+            work.category &&
+            !categories.includes(work.category)
+        ) {
+            categories.push(work.category);
+        }
+    });
+
+    categories.sort(function(a, b) {
+        return a.localeCompare(b, "ja");
+    });
+
+    categorySelect.innerHTML = "";
+
+    var allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "すべてのカテゴリ";
+    categorySelect.appendChild(allOption);
+
+    categories.forEach(function(category) {
+        var option = document.createElement("option");
+
+        option.value = category;
+        option.textContent = category;
+
+        categorySelect.appendChild(option);
+    });
+}
+
+
+// ========================================
+// 5. 作品の絞り込み・並び替え
+// ========================================
+
+function displayWorks() {
+    if (!grid || !categorySelect || !sortSelect) {
+        return;
+    }
+
+    var selectedCategory = categorySelect.value;
+    var sortType = sortSelect.value;
+
+    // 元データを壊さないようにコピーする
+    var displayList = allWorks.slice();
+
+    // カテゴリで絞り込み
+    if (selectedCategory !== "all") {
+        displayList = displayList.filter(function(work) {
+            return work.category === selectedCategory;
+        });
+    }
+
+    // 並び替え
+    if (sortType === "new") {
+        displayList.sort(function(a, b) {
+            return (Number(b.year) || 0) -
+                   (Number(a.year) || 0);
+        });
+    } else if (sortType === "old") {
+        displayList.sort(function(a, b) {
+            return (Number(a.year) || 0) -
+                   (Number(b.year) || 0);
+        });
+    } else if (sortType === "title") {
+        displayList.sort(function(a, b) {
+            return a.title.localeCompare(b.title, "ja");
+        });
+    }
+
+    // 表示をいったん消去
+    grid.replaceChildren();
+
+    // 表示件数を更新
+    if (worksCount) {
+        worksCount.textContent =
+            "全 " + displayList.length + " 件の作品";
+    }
+
+    // 該当作品がない場合
+    if (displayList.length === 0) {
+        var empty = document.createElement("p");
+
+        empty.className = "empty-message";
+        empty.textContent = "該当する作品がありません。";
+
+        grid.appendChild(empty);
+        return;
+    }
+
+    // 作品カードを作成
+    displayList.forEach(function(work, index) {
+        var card = document.createElement("article");
+        card.className = "work-card";
+
+        // 作品画像
+        if (work.image) {
+            var img = document.createElement("img");
+
+            img.className = "work-image";
+            img.src = work.image;
+            img.alt = work.title + "の作品画像";
+            img.loading = "lazy";
+
+            // 画像が見つからない場合の表示
+            img.addEventListener("error", function() {
+                var placeholder =
+                    document.createElement("div");
+
+                placeholder.className = "image-placeholder";
+                placeholder.textContent = "IMAGE NOT FOUND";
+
+                img.replaceWith(placeholder);
+            }, { once: true });
+
+            card.appendChild(img);
+        } else {
+            var placeholder =
+                document.createElement("div");
+
+            placeholder.className = "image-placeholder";
+            placeholder.textContent = "NO IMAGE";
+
+            card.appendChild(placeholder);
+        }
+
+        // 作品情報の領域
+        var info = document.createElement("div");
+        info.className = "works-info";
+
+        // 番号
+        var number = document.createElement("p");
+        number.className = "work-number";
+        number.textContent =
+            "PROJECT / " +
+            String(index + 1).padStart(2, "0");
+
+        // カテゴリ
+        var category = document.createElement("p");
+        category.className = "work-category";
+        category.textContent = work.category;
+
+        // タイトル
+        var title = document.createElement("h3");
+        title.textContent = work.title;
+
+        // 説明
+        var description = document.createElement("p");
+        description.className = "work-description";
+        description.textContent = work.description;
+
+        // 制作年
+        var year = document.createElement("p");
+        year.className = "work-year";
+        year.textContent = work.year
+            ? "制作年 / " + work.year
+            : "制作年 / 未設定";
+
+        // カードに追加
+        info.appendChild(number);
+        info.appendChild(category);
+        info.appendChild(title);
+        info.appendChild(description);
+        info.appendChild(year);
+
+        card.appendChild(info);
+        grid.appendChild(card);
+    });
+}
+
+
+// ========================================
+// 6. 操作時に作品を再表示
+// ========================================
+
+if (categorySelect) {
+    categorySelect.addEventListener(
+        "change",
+        displayWorks
+    );
+}
+
+if (sortSelect) {
+    sortSelect.addEventListener(
+        "change",
+        displayWorks
+    );
+}
+
+
+// ========================================
+// 7. 天気情報を取得
+// ========================================
+
+// 川崎市付近の座標
+var latitude = 35.5308;
+var longitude = 139.7036;
 
 var weatherUrl =
     "https://api.open-meteo.com/v1/forecast" +
@@ -289,96 +357,80 @@ fetch(weatherUrl)
 
         return response.json();
     })
-
     .then(function(data) {
-
         if (!data.current) {
             throw new Error("天気データがありません");
         }
 
-        var weatherCode = data.current.weather_code;
-        var temperature = data.current.temperature_2m;
-
-        showWeather(weatherCode, temperature);
+        showWeather(
+            data.current.weather_code,
+            data.current.temperature_2m
+        );
     })
-
     .catch(function(error) {
-        console.error("天気情報の取得に失敗しました:", error);
+        console.error("天気情報エラー:", error);
 
-        var icon = document.getElementById("weather-icon");
+        var weather = document.getElementById("weather-icon");
 
-        if (icon) {
-            icon.textContent = "天気情報を取得できません";
+        if (weather) {
+            weather.textContent =
+                "天気情報は現在利用できません";
         }
     });
 
 
 // ========================================
-// 11. 天気情報を画面に表示する
+// 8. 天気を表示し、アクセントカラーを変更
 // ========================================
 
 function showWeather(code, temperature) {
+    var weather = document.getElementById("weather-icon");
 
-    var icon = document.getElementById("weather-icon");
-
-    if (!icon) {
-        console.error("weather-iconがHTMLにありません");
+    if (!weather) {
         return;
     }
 
-    var weatherText = "";
-    var weatherSymbol = "";
+    var symbol = "☁";
+    var description = "くもり";
+    var theme = "weather-cloudy";
 
     if (code === 0) {
-        weatherText = "晴れ";
-        weatherSymbol = "☀";
-
+        symbol = "☀";
+        description = "晴れ";
+        theme = "weather-sunny";
     } else if (code >= 1 && code <= 3) {
-        weatherText = "くもり";
-        weatherSymbol = "☁";
-
+        symbol = "☁";
+        description = "くもり";
+        theme = "weather-cloudy";
     } else if (code >= 45 && code <= 48) {
-        weatherText = "霧";
-        weatherSymbol = "🌫";
-
+        symbol = "🌫";
+        description = "霧";
+        theme = "weather-cloudy";
     } else if (code >= 51 && code <= 67) {
-        weatherText = "雨";
-        weatherSymbol = "☂";
-
+        symbol = "☂";
+        description = "雨";
+        theme = "weather-rainy";
     } else if (code >= 71 && code <= 86) {
-        weatherText = "雪";
-        weatherSymbol = "❄";
-
+        symbol = "❄";
+        description = "雪";
+        theme = "weather-cloudy";
     } else if (code >= 95) {
-        weatherText = "雷雨";
-        weatherSymbol = "⚡";
-
-    } else {
-        weatherText = "くもり";
-        weatherSymbol = "☁";
+        symbol = "⚡";
+        description = "雷雨";
+        theme = "weather-rainy";
     }
 
-    icon.textContent =
-        weatherSymbol + " " +
-        weatherText + " " +
+    weather.textContent =
+        symbol + " " + description + " / " +
         temperature + "℃";
 
-    // 天気に応じて背景クラスを変更
     document.body.classList.remove(
         "weather-sunny",
         "weather-cloudy",
         "weather-rainy"
     );
 
-    if (code === 0) {
-        document.body.classList.add("weather-sunny");
-
-    } else if (code >= 51 && code <= 67) {
-        document.body.classList.add("weather-rainy");
-
-    } else {
-        document.body.classList.add("weather-cloudy");
-    }
+    document.body.classList.add(theme);
 }
 
 
